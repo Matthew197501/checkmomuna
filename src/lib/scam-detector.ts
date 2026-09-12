@@ -29,7 +29,7 @@ const patterns = [
      * Sensitive authentication information being requested
      * from the recipient.
      *
-     * "Enter" is intentionally excluded here because:
+     * "Enter" is intentionally excluded because:
      *
      * "Enter the OTP in the official app"
      *
@@ -216,6 +216,53 @@ const accountAccessPattern =
   /\b(?:account|bank|wallet|login|log[ -]?in|access|sign[ -]?in|identity|verify|verification)\b/i;
 
 
+/*
+ * Crypto / investment context.
+ */
+const cryptoPattern =
+  /\b(?:crypto|cryptocurrency|bitcoin|btc|ethereum|eth|usdt|usdc|tether|token|coin|blockchain|investment|trading|wallet balance)\b/i;
+
+
+/*
+ * Unexpected funds / balance claims.
+ *
+ * These are not inherently scams. They become much more
+ * suspicious when combined with account credentials,
+ * withdrawal instructions, or an external login link.
+ */
+const unexpectedFundsPattern =
+  /\b(?:balance|funds|money|assets|deposit|credited|transferred|received)\b/i;
+
+
+/*
+ * Withdrawal instructions.
+ */
+const withdrawalPattern =
+  /\b(?:withdraw|withdrawal|cash out|claim|release your funds)\b/i;
+
+
+/*
+ * Login credentials appearing directly in a message.
+ *
+ * Example:
+ *
+ * "New Account: hhh699"
+ * "New Password: aaa259"
+ *
+ * This is different from asking the recipient to provide
+ * their own password.
+ */
+const exposedCredentialPattern =
+  /\b(?:new\s+)?(?:account|username|user(?:name)?|password|passcode|pin)\s*[:=]/i;
+
+
+/*
+ * Detects a transfer/account setup context.
+ */
+const accountTransferPattern =
+  /\b(?:transferred|transfer(?:red)? to your new account|new account|new wallet|new login)\b/i;
+
+
 export function analyzeMessage(
   message: string
 ): ScamAnalysis {
@@ -282,15 +329,6 @@ export function analyzeMessage(
    * Requesting an OTP / verification code becomes
    * substantially more suspicious when the message
    * also involves account access or identity verification.
-   *
-   * Example:
-   *
-   * "Please provide the verification code that was
-   *  sent to your phone to verify your account."
-   *
-   * This is different from:
-   *
-   * "Enter the verification code in the official app."
    */
   if (
     !isCredentialWarning &&
@@ -306,6 +344,118 @@ export function analyzeMessage(
     });
 
     score += 20;
+  }
+
+
+  /*
+   * CRYPTO / FINANCIAL ACCOUNT SCAM SIGNAL
+   *
+   * Crypto or investment language alone is not enough.
+   * The signal is activated when crypto/investment content
+   * is combined with unexpected funds and account activity.
+   */
+  const hasCryptoContext =
+    cryptoPattern.test(message);
+
+  const hasUnexpectedFunds =
+    unexpectedFundsPattern.test(message);
+
+  const hasWithdrawal =
+    withdrawalPattern.test(message);
+
+  const hasExposedCredentials =
+    exposedCredentialPattern.test(message);
+
+  const hasAccountTransfer =
+    accountTransferPattern.test(message);
+
+
+  if (
+    hasCryptoContext &&
+    hasUnexpectedFunds &&
+    (hasWithdrawal || hasExposedCredentials || hasAccountTransfer)
+  ) {
+
+    flags.push({
+      category: "Crypto / financial account manipulation",
+      severity: "high",
+      explanation:
+        "The message combines cryptocurrency or investment claims with unexpected funds and account activity, a pattern commonly associated with financial phishing or account-takeover scams.",
+    });
+
+    score += 20;
+  }
+
+
+  /*
+   * EXPOSED LOGIN CREDENTIALS
+   *
+   * A message containing a newly supplied account/password
+   * is suspicious when it is paired with account access,
+   * withdrawal, or financial activity.
+   */
+  if (
+    hasExposedCredentials &&
+    (
+      accountAccessPattern.test(message) ||
+      hasWithdrawal ||
+      hasCryptoContext
+    )
+  ) {
+
+    flags.push({
+      category: "Credentials supplied in message",
+      severity: "high",
+      explanation:
+        "The message provides account credentials or login information and connects them to financial or account activity.",
+    });
+
+    score += 20;
+  }
+
+
+  /*
+   * WITHDRAWAL + ACCOUNT ACCESS
+   *
+   * A message directing the recipient to log in and
+   * withdraw funds deserves additional scrutiny.
+   */
+  if (
+    hasWithdrawal &&
+    accountAccessPattern.test(message)
+  ) {
+
+    flags.push({
+      category: "Withdrawal + account access",
+      severity: "high",
+      explanation:
+        "The message directs the recipient toward account access and withdrawal activity, which can be used to lure users into fraudulent financial websites.",
+    });
+
+    score += 15;
+  }
+
+
+  /*
+   * TRANSFER + NEW ACCOUNT
+   *
+   * Messages claiming that funds were moved to a newly
+   * created account can be suspicious when paired with
+   * financial or crypto context.
+   */
+  if (
+    hasAccountTransfer &&
+    (hasCryptoContext || hasWithdrawal)
+  ) {
+
+    flags.push({
+      category: "Unexpected account transfer",
+      severity: "high",
+      explanation:
+        "The message claims that funds were transferred to a new account and directs the recipient toward financial activity.",
+    });
+
+    score += 15;
   }
 
 
