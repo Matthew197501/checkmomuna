@@ -1,0 +1,1416 @@
+---
+import "../styles/global.css";
+---
+
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Check Mo Muna — AI-powered scam-risk analysis for suspicious messages and screenshots."
+    />
+    <title>Check Mo Muna — Bago mag-click, check mo muna.</title>
+  </head>
+
+  <body class="min-h-screen bg-cmm-black text-cmm-white">
+    <script>
+      import { createWorker } from "tesseract.js";
+
+      const textarea = document.querySelector("textarea");
+      const fileInput = document.querySelector('input[type="file"]');
+      const button = document.querySelector("button");
+      const analyzerCard = button?.closest("[data-analyzer]");
+
+      textarea?.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          button?.click();
+        }
+      });
+
+      let selectedImage = null;
+
+      fileInput?.addEventListener("change", (event) => {
+        const input = event.target;
+
+        if (input.files && input.files.length > 0) {
+          selectedImage = input.files[0];
+
+          const label = fileInput.closest("label");
+          const filename = label?.querySelector("[data-filename]");
+
+          if (filename) {
+            filename.textContent = selectedImage.name;
+          }
+        }
+      });
+
+      async function extractTextFromImage(file) {
+        const worker = await createWorker("eng");
+        const result = await worker.recognize(file);
+        await worker.terminate();
+        return result.data.text;
+      }
+
+      function escapeHTML(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      function getRiskStyles(level) {
+        if (level === "VERY_HIGH") {
+          return {
+            border: "border-cmm-red/50",
+            accent: "text-cmm-red",
+            bg: "bg-cmm-red/5",
+            badge: "bg-cmm-red text-black",
+            glow: "shadow-[0_0_80px_-25px_rgba(255,59,59,0.55)]",
+          };
+        }
+
+        if (level === "HIGH") {
+          return {
+            border: "border-cmm-red/30",
+            accent: "text-cmm-red",
+            bg: "bg-cmm-red/5",
+            badge: "bg-cmm-red text-black",
+            glow: "shadow-[0_0_70px_-30px_rgba(255,59,59,0.35)]",
+          };
+        }
+
+        if (level === "SUSPICIOUS") {
+          return {
+            border: "border-yellow-400/40",
+            accent: "text-yellow-400",
+            bg: "bg-yellow-400/5",
+            badge: "bg-yellow-400 text-black",
+            glow: "shadow-[0_0_70px_-30px_rgba(250,204,21,0.3)]",
+          };
+        }
+
+        return {
+          border: "border-cmm-green/30",
+          accent: "text-cmm-green",
+          bg: "bg-cmm-green/5",
+          badge: "bg-cmm-green text-black",
+          glow: "shadow-[0_0_70px_-30px_rgba(0,255,136,0.35)]",
+        };
+      }
+
+      function displayResult(result, aiAnalysis, extractedText = "") {
+        const existingResult = document.getElementById("analysis-result");
+
+        if (existingResult) {
+          existingResult.remove();
+        }
+
+        const resultBox = document.createElement("div");
+        const styles = getRiskStyles(result.level);
+
+        resultBox.id = "analysis-result";
+        resultBox.className =
+          `mt-8 overflow-hidden border ${styles.border} ${styles.bg} ${styles.glow}`;
+
+        const levelText = escapeHTML(result.level.replace("_", " "));
+        const finalScore = escapeHTML(result.finalScore);
+        const ruleScore = escapeHTML(result.score);
+        const aiScore = escapeHTML(result.aiScore);
+        const safeExtractedText = escapeHTML(extractedText);
+        const safeSummary = escapeHTML(aiAnalysis?.summary || "");
+
+        const ruleFlags = (result.flags || [])
+          .map(
+            (flag) => `
+              <li class="border border-cmm-dark bg-cmm-black p-4">
+                <div class="flex gap-3">
+                  <span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-cmm-red"></span>
+                  <div>
+                    <p class="font-mono text-xs font-bold uppercase tracking-wider text-cmm-white">
+                      ${escapeHTML(flag.category)}
+                    </p>
+                    <p class="mt-2 text-sm leading-6 text-cmm-green-dim">
+                      ${escapeHTML(flag.explanation)}
+                    </p>
+                  </div>
+                </div>
+              </li>
+            `
+          )
+          .join("");
+
+        const aiFlags = (aiAnalysis?.flags || [])
+          .map(
+            (flag) => `
+              <li class="border border-cmm-dark bg-cmm-black p-4">
+                <div class="flex items-center justify-between gap-4">
+                  <p class="font-mono text-xs font-bold uppercase tracking-wider">
+                    ${escapeHTML(flag.category)}
+                  </p>
+                  <span class="border border-cmm-dark px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wider text-cmm-green-dim">
+                    ${escapeHTML(flag.severity)}
+                  </span>
+                </div>
+                <p class="mt-2 text-sm leading-6 text-cmm-green-dim">
+                  ${escapeHTML(flag.explanation)}
+                </p>
+              </li>
+            `
+          )
+          .join("");
+
+        const recommendationList = aiAnalysis?.recommendations || [];
+        const primaryRecommendation = recommendationList[0] || "Review the message carefully and avoid taking any irreversible action until you verify the sender through an official channel.";
+
+        const recommendations = recommendationList
+          .slice(1)
+          .map(
+            (recommendation) => `
+              <li class="border border-cmm-dark bg-cmm-black p-4 text-sm leading-6 text-cmm-green-dim">
+                <span class="mr-2 text-cmm-green">›</span>
+                ${escapeHTML(recommendation)}
+              </li>
+            `
+          )
+          .join("");
+
+        resultBox.innerHTML = `
+          <!-- RESULT HEADER -->
+          <div class="border-b border-cmm-dark bg-cmm-black p-6 sm:p-10">
+            <div class="flex flex-col gap-8">
+
+              <div class="flex items-center justify-between gap-4">
+                <div class="flex items-center gap-3">
+                  <span class="h-2.5 w-2.5 animate-pulse rounded-full ${styles.accent.replace("text-", "bg-")}"></span>
+                  <span class="font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-cmm-green-dim">
+                    ANALYSIS COMPLETE
+                  </span>
+                </div>
+
+                <span class="font-mono text-[9px] uppercase tracking-[0.2em] text-cmm-green-dim">
+                  CMM / RESULT
+                </span>
+              </div>
+
+              <div>
+                <p class="font-mono text-[10px] font-bold uppercase tracking-[0.2em] ${styles.accent}">
+                  FINAL RISK ASSESSMENT
+                </p>
+
+                <div class="mt-4 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <h3 class="font-black uppercase leading-none tracking-[-0.05em] ${styles.accent} text-4xl sm:text-5xl">
+                      ${levelText} RISK
+                    </h3>
+
+                    <p class="mt-4 max-w-xl text-sm leading-6 text-cmm-green-dim">
+                      Based on the message patterns and contextual signals detected by Check Mo Muna.
+                    </p>
+                  </div>
+
+                  <div class="shrink-0 sm:text-right">
+                    <p class="font-mono text-7xl font-black leading-none tracking-[-0.07em] ${styles.accent}">
+                      ${finalScore}
+                    </p>
+                    <p class="mt-2 font-mono text-[10px] uppercase tracking-[0.2em] text-cmm-green-dim">
+                      RISK SCORE / 100
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-3 border-t border-cmm-dark pt-5">
+                <span class="inline-flex ${styles.badge} px-4 py-2 font-mono text-xs font-black uppercase tracking-[0.15em]">
+                  ${levelText}
+                </span>
+
+                <span class="border border-cmm-dark px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-cmm-green-dim">
+                  RULES ${ruleScore}
+                </span>
+
+                <span class="border border-cmm-dark px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-cmm-green-dim">
+                  AI ${aiScore}
+                </span>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- AI SUMMARY -->
+          ${
+            safeSummary
+              ? `
+                <div class="border-b border-cmm-dark p-6 sm:p-8">
+                  <p class="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-cmm-green">
+                    // AI assessment
+                  </p>
+                  <p class="mt-4 max-w-3xl text-base leading-8 text-cmm-white">
+                    ${safeSummary}
+                  </p>
+                </div>
+              `
+              : ""
+          }
+
+          <!-- OCR OUTPUT -->
+          ${
+            extractedText
+              ? `
+                <div class="border-b border-cmm-dark p-6 sm:p-8">
+                  <p class="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-cmm-green">
+                    // OCR output
+                  </p>
+                  <div class="mt-4 max-h-48 overflow-auto border border-cmm-dark bg-cmm-black p-4">
+                    <p class="whitespace-pre-wrap font-mono text-xs leading-6 text-cmm-green-dim">
+                      ${safeExtractedText}
+                    </p>
+                  </div>
+                </div>
+              `
+              : ""
+          }
+
+          <!-- SECURITY DETAILS -->
+          <div class="p-6 sm:p-8">
+
+            <div class="flex items-center gap-4">
+              <span class="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-cmm-green">
+                // Security indicators
+              </span>
+              <span class="h-px flex-1 bg-cmm-dark"></span>
+            </div>
+
+            ${
+              ruleFlags
+                ? `
+                  <ul class="mt-5 space-y-2">
+                    ${ruleFlags}
+                  </ul>
+                `
+                : `
+                  <div class="mt-5 border border-cmm-green/20 bg-cmm-green/5 p-4">
+                    <p class="font-mono text-xs leading-6 text-cmm-green">
+                      NO OBVIOUS RULE-BASED INDICATORS DETECTED.
+                    </p>
+                    <p class="mt-2 text-sm leading-6 text-cmm-green-dim">
+                      This does not guarantee that the message is safe.
+                    </p>
+                  </div>
+                `
+            }
+
+            ${
+              aiFlags
+                ? `
+                  <div class="mt-10">
+                    <div class="flex items-center gap-4">
+                      <span class="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-cmm-green">
+                        // AI concerns
+                      </span>
+                      <span class="h-px flex-1 bg-cmm-dark"></span>
+                    </div>
+
+                    <ul class="mt-5 space-y-2">
+                      ${aiFlags}
+                    </ul>
+                  </div>
+                `
+                : ""
+            }
+
+            ${
+              recommendationList.length
+                ? `
+                  <div class="mt-10">
+                    <div class="flex items-center gap-4">
+                      <span class="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-cmm-green">
+                        // Recommended action
+                      </span>
+                      <span class="h-px flex-1 bg-cmm-dark"></span>
+                    </div>
+
+                    <div class="mt-5 border border-cmm-green/30 bg-cmm-green/5 p-5 sm:p-6">
+                      <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <p class="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-cmm-green">
+                            FIRST THING TO DO
+                          </p>
+                          <p class="mt-3 text-xl font-black leading-7 text-cmm-white sm:text-2xl">
+                            ${escapeHTML(primaryRecommendation)}
+                          </p>
+                        </div>
+                        <span class="shrink-0 border border-cmm-green/30 px-3 py-2 font-mono text-[9px] font-bold uppercase tracking-[0.15em] text-cmm-green">
+                          PRIORITY 01
+                        </span>
+                      </div>
+                    </div>
+
+                    ${
+                      recommendations
+                        ? `
+                          <div class="mt-3">
+                            <p class="mb-2 font-mono text-[9px] font-bold uppercase tracking-[0.15em] text-cmm-green-dim">
+                              Other recommended steps
+                            </p>
+                            <ul class="space-y-2">
+                              ${recommendations}
+                            </ul>
+                          </div>
+                        `
+                        : ""
+                    }
+                  </div>
+                `
+                : ""
+            }
+
+            <!-- DISCLAIMER -->
+            <div class="mt-10 border border-yellow-400/20 bg-yellow-400/5 p-5">
+              <p class="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-yellow-400">
+                ! Important
+              </p>
+              <p class="mt-3 text-sm leading-6 text-cmm-green-dim">
+                This is an automated risk assessment, not definitive proof
+                that a message or sender is fraudulent.
+              </p>
+            </div>
+
+            <!-- SUPPORT -->
+            <div class="mt-8 border border-cmm-green/20 bg-cmm-green/5 p-6 text-center">
+              <p class="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-cmm-green">
+                SUPPORT THE PROJECT
+              </p>
+
+              <p class="mt-4 text-xl font-black">
+                Did Check Mo Muna help?
+              </p>
+
+              <p class="mx-auto mt-2 max-w-md text-sm leading-6 text-cmm-green-dim">
+                You can support the project by buying me a coffee through GCash.
+              </p>
+
+              <div class="mx-auto mt-5 max-w-sm border border-cmm-green/20 bg-cmm-black p-5">
+                <p class="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-cmm-green-dim">
+                  GCASH
+                </p>
+
+                <p class="mt-2 font-mono text-xl font-black tracking-wider text-cmm-green">
+                  09052085863
+                </p>
+
+                <div class="my-4 h-px bg-cmm-dark"></div>
+
+                <p class="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-cmm-green-dim">
+                  ACCOUNT NAME
+                </p>
+
+                <p class="mt-2 font-bold">
+                  Samuel Mallo
+                </p>
+              </div>
+
+              <p class="mt-4 font-mono text-[9px] uppercase tracking-wider text-cmm-green-dim">
+                Completely optional. Check Mo Muna is free.
+              </p>
+            </div>
+
+          </div>
+        `;
+
+        analyzerCard?.appendChild(resultBox);
+
+        setTimeout(() => {
+          resultBox.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        }, 100);
+      }
+
+      button?.addEventListener("click", async () => {
+        const message = textarea?.value.trim();
+
+        if (!message && !selectedImage) {
+          alert(
+            "Please paste a message or upload a screenshot first."
+          );
+          return;
+        }
+
+        button.disabled = true;
+
+        const originalHTML = button.innerHTML;
+
+        button.innerHTML = `
+          <span class="flex items-center gap-3">
+            <span class="h-2 w-2 animate-pulse rounded-full bg-cmm-green"></span>
+            ANALYZING MESSAGE...
+          </span>
+
+          <span class="font-mono text-xs text-cmm-green">
+            RUNNING
+          </span>
+        `;
+
+        try {
+          let textToAnalyze = message;
+          let extractedText = "";
+
+          if (!textToAnalyze && selectedImage) {
+            extractedText =
+              await extractTextFromImage(selectedImage);
+
+            textToAnalyze =
+              extractedText.trim();
+          }
+
+          if (!textToAnalyze) {
+            alert(
+              "We couldn't detect readable text in the screenshot."
+            );
+            return;
+          }
+
+          const response = await fetch("/api/analyze", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              message: textToAnalyze,
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error(
+              "Analysis request failed."
+            );
+          }
+
+          const data = await response.json();
+
+          displayResult(
+            data.analysis,
+            data.aiAnalysis,
+            extractedText
+          );
+
+        } catch (error) {
+          console.error(
+            "Check Mo Muna error:",
+            error
+          );
+
+          const message =
+            error instanceof Error
+              ? error.message
+              : String(error);
+
+          alert(
+            `Analysis failed: ${message}`
+          );
+
+        } finally {
+          button.disabled = false;
+          button.innerHTML = originalHTML;
+        }
+      });
+    </script>
+
+
+    <main>
+
+      <!-- NAVIGATION -->
+      <nav class="border-b border-cmm-dark">
+        <div class="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
+
+          <a href="/" class="group flex items-center gap-4">
+            <div class="flex h-10 w-10 items-center justify-center border border-cmm-green bg-cmm-green font-mono text-xl font-black text-black transition group-hover:rotate-3">
+              ?
+            </div>
+
+            <div>
+              <div class="font-black tracking-tight">
+                CHECK MO MUNA<span class="text-cmm-green">.</span>
+              </div>
+
+              <div class="font-mono text-[9px] uppercase tracking-[0.2em] text-cmm-green-dim">
+                Security analysis
+              </div>
+            </div>
+          </a>
+
+          <div class="hidden items-center gap-8 sm:flex">
+            <a
+              href="#analyzer"
+              class="font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-cmm-green-dim transition hover:text-cmm-green"
+            >
+              Analyze
+            </a>
+
+            <a
+              href="#how-it-works"
+              class="font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-cmm-green-dim transition hover:text-cmm-green"
+            >
+              How it works
+            </a>
+
+            <a
+              href="#about"
+              class="font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-cmm-green-dim transition hover:text-cmm-green"
+            >
+              About
+            </a>
+
+            <span class="font-mono text-[10px] text-cmm-green">
+              ● ONLINE
+            </span>
+          </div>
+
+        </div>
+      </nav>
+
+
+      <!-- HERO -->
+
+      <section class="relative overflow-hidden border-b border-cmm-dark">
+
+        <div
+          class="pointer-events-none absolute inset-0 opacity-30"
+          style="background-image: linear-gradient(rgba(0,255,136,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,255,136,0.05) 1px, transparent 1px); background-size: 48px 48px;"
+        ></div>
+
+        <div class="pointer-events-none absolute left-0 right-0 top-1/2 h-px bg-cmm-green/10"></div>
+
+      <div class="relative mx-auto max-w-7xl px-4 pb-8 pt-4 sm:pb-12 sm:pt-6 lg:py-10">          <div class="grid gap-14 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
+
+            <div>
+
+              <div class="mb-8 flex items-center gap-3">
+                <span class="h-2 w-2 animate-pulse rounded-full bg-cmm-green"></span>
+
+                <span class="font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-cmm-green">
+                  SYSTEM READY
+                </span>
+
+                <span class="font-mono text-[10px] text-cmm-green-dim">
+                  / CMM-001
+                </span>
+              </div>
+
+              <p class="font-mono text-xs uppercase tracking-[0.25em] text-cmm-green-dim">
+                Bago mag-click.
+                <br />
+                Bago magbayad.
+              </p>
+
+              <h1 class="mt-5 max-w-4xl text-7xl font-black leading-[0.82] tracking-[-0.07em] sm:text-8xl lg:text-[9.5rem]">
+                CHECK
+                <br />
+                <span class="text-cmm-green">
+                  MO MUNA.
+                </span>
+              </h1>
+
+              <p class="mt-9 max-w-xl text-base leading-7 text-cmm-green-dim sm:text-lg">
+                May kahina-hinalang message?
+                <br />
+
+                <span class="font-bold text-cmm-white">
+                  Huwag muna. Tingnan muna kung may red flags.
+                </span>
+              </p>
+
+              <div class="mt-10 flex flex-col items-start gap-5">
+
+                <a
+                  href="#analyzer"
+                  class="group flex items-center gap-6 border border-cmm-green bg-cmm-green px-6 py-4 font-mono text-xs font-black uppercase tracking-[0.15em] text-black transition hover:bg-transparent hover:text-cmm-green"
+                >
+                  <span>
+                    Start checking
+                  </span>
+
+                  <span class="text-xl transition group-hover:translate-y-1">
+                    ↓
+                  </span>
+                </a>
+
+                <a
+                  href="#analyzer"
+                  class="flex items-center gap-3 font-mono text-[9px] uppercase tracking-[0.2em] text-cmm-green-dim transition hover:text-cmm-green"
+                >
+                  <span class="flex h-7 w-7 items-center justify-center border border-cmm-green/20">
+                    ↓
+                  </span>
+
+                  Scroll to the message checker
+                </a>
+
+              </div>
+
+            </div>
+
+
+            <!-- HERO DIAGNOSTIC PANEL -->
+
+            <div class="border border-cmm-green/20 bg-cmm-dark">
+
+              <div class="flex items-center justify-between border-b border-cmm-green/10 px-5 py-4">
+                <span class="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-cmm-green">
+                  THREAT INSPECTION
+                </span>
+
+                <span class="font-mono text-[9px] text-cmm-green-dim">
+                  LIVE
+                </span>
+              </div>
+
+              <div class="p-6">
+
+                <div class="space-y-4 font-mono text-xs">
+
+                  <div class="flex items-center justify-between border-b border-cmm-green/10 pb-3">
+                    <span class="text-cmm-green-dim">RULE ENGINE</span>
+                    <span class="text-cmm-green">READY</span>
+                  </div>
+
+                  <div class="flex items-center justify-between border-b border-cmm-green/10 pb-3">
+                    <span class="text-cmm-green-dim">AI ANALYSIS</span>
+                    <span class="text-cmm-green">READY</span>
+                  </div>
+
+                  <div class="flex items-center justify-between border-b border-cmm-green/10 pb-3">
+                    <span class="text-cmm-green-dim">OCR ENGINE</span>
+                    <span class="text-cmm-green">READY</span>
+                  </div>
+
+                  <div class="flex items-center justify-between">
+                    <span class="text-cmm-green-dim">RISK ENGINE</span>
+                    <span class="text-cmm-green">READY</span>
+                  </div>
+
+                </div>
+
+                <div class="mt-8 border border-cmm-red/30 bg-cmm-red/5 p-4">
+
+                  <div class="flex items-center gap-3">
+                    <span class="h-2 w-2 rounded-full bg-cmm-red"></span>
+
+                    <span class="font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-cmm-red">
+                      COMMON THREATS
+                    </span>
+                  </div>
+
+                  <p class="mt-4 font-mono text-xs leading-6 text-cmm-green-dim">
+                    OTP REQUEST
+                    <br />
+                    PAYMENT PRESSURE
+                    <br />
+                    FAKE PRIZE
+                    <br />
+                    ACCOUNT THREAT
+                  </p>
+
+                </div>
+
+                <div class="mt-8 border-t border-cmm-green/10 pt-5">
+
+                  <div class="flex items-center gap-3">
+                    <span class="h-1.5 w-1.5 rounded-full bg-cmm-green"></span>
+
+                    <span class="font-mono text-[9px] uppercase tracking-[0.2em] text-cmm-green-dim">
+                      NEXT STEP
+                    </span>
+                  </div>
+
+                  <p class="mt-3 font-mono text-xs leading-6 text-cmm-green">
+                    SCROLL DOWN
+                    <br />
+                    TO INSPECT A MESSAGE
+                  </p>
+
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+
+
+          <!-- SCROLL TO ANALYZER -->
+
+          <div class="mt-14 flex justify-center sm:mt-16">
+
+            <a
+              href="#analyzer"
+              class="group flex items-center gap-4 font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-cmm-green-dim transition hover:text-cmm-green"
+              aria-label="Scroll to message analyzer"
+            >
+
+              <span class="h-px w-10 bg-cmm-green/30 transition group-hover:w-16 group-hover:bg-cmm-green"></span>
+
+              <span>
+                SCROLL TO CHECK
+              </span>
+
+              <span class="text-base transition group-hover:translate-y-1">
+                ↓
+              </span>
+
+              <span class="h-px w-10 bg-cmm-green/30 transition group-hover:w-16 group-hover:bg-cmm-green"></span>
+
+            </a>
+
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ANALYZER -->
+
+      <section
+        id="analyzer"
+        class="scroll-mt-20 border-b border-cmm-dark bg-cmm-dark px-6 py-20 sm:py-28"
+      >
+
+        <div class="mx-auto max-w-5xl" data-analyzer>
+
+          <div class="mb-8 grid gap-5 sm:grid-cols-[1fr_auto] sm:items-end">
+
+            <div>
+
+              <div class="flex items-center gap-3">
+
+                <span class="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-cmm-green">
+                  CMM / 002
+                </span>
+
+                <span class="h-px w-8 bg-cmm-green/30"></span>
+
+                <span class="font-mono text-[10px] uppercase tracking-[0.2em] text-cmm-green-dim">
+                  Message inspection
+                </span>
+
+              </div>
+
+              <h2 class="mt-5 text-3xl font-black tracking-[-0.04em] sm:text-4xl">
+                Start here.
+                <span class="text-cmm-green">
+                  Check the message.
+                </span>
+              </h2>
+
+              <p class="mt-3 max-w-xl text-sm leading-7 text-cmm-green-dim">
+                Paste the suspicious message below, or upload a screenshot
+                and let the system inspect it.
+              </p>
+
+            </div>
+
+            <div class="flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.15em] text-cmm-green">
+              <span class="h-1.5 w-1.5 animate-pulse rounded-full bg-cmm-green"></span>
+              READY
+            </div>
+
+          </div>
+
+
+          <div class="border border-cmm-green/20 bg-cmm-black">
+
+            <div class="grid lg:grid-cols-[1fr_220px]">
+
+              <div class="border-b border-cmm-green/10 p-5 sm:p-8 lg:border-b-0 lg:border-r">
+
+                <div class="mb-5 flex items-center justify-between">
+
+                  <div class="flex items-center gap-3">
+
+                    <span class="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-cmm-green">
+                      INPUT MESSAGE
+                    </span>
+
+                    <span class="h-1 w-1 rounded-full bg-cmm-green/40"></span>
+
+                    <span class="font-mono text-[9px] uppercase tracking-[0.15em] text-cmm-green-dim">
+                      STEP 01
+                    </span>
+
+                  </div>
+
+                  <span class="hidden font-mono text-[9px] text-cmm-green-dim sm:block">
+                    PASTE / TYPE
+                  </span>
+
+                </div>
+
+                <div class="relative">
+
+                  <textarea
+                    class="min-h-48 w-full resize-y border border-cmm-green/15 bg-cmm-dark p-5 pb-14 font-mono text-sm leading-7 text-cmm-white outline-none transition placeholder:text-cmm-green-dim/50 focus:border-cmm-green focus:ring-1 focus:ring-cmm-green/30"
+                    placeholder="Paste the suspicious message here..."
+                    aria-label="Suspicious message"
+                  ></textarea>
+
+                  <div class="pointer-events-none absolute bottom-4 left-5 right-5 flex items-center justify-between">
+
+                    <span class="font-mono text-[9px] uppercase tracking-[0.15em] text-cmm-green-dim/60">
+                      MESSAGE INPUT
+                    </span>
+
+                    <span class="font-mono text-[9px] uppercase tracking-[0.15em] text-cmm-green-dim/60">
+                      ENTER ↵ TO CHECK
+                    </span>
+
+                  </div>
+
+                </div>
+
+
+                <div class="my-6 flex items-center gap-4">
+
+                  <span class="h-px flex-1 bg-cmm-green/10"></span>
+
+                  <span class="font-mono text-[9px] uppercase tracking-[0.2em] text-cmm-green-dim">
+                    OR
+                  </span>
+
+                  <span class="h-px flex-1 bg-cmm-green/10"></span>
+
+                </div>
+
+
+                <label class="group flex cursor-pointer flex-col gap-4 border border-dashed border-cmm-green/20 bg-cmm-dark p-5 transition hover:border-cmm-green hover:bg-cmm-green/5 sm:flex-row sm:items-center sm:justify-between">
+
+                  <div class="flex items-center gap-4">
+
+                    <div class="flex h-12 w-12 shrink-0 items-center justify-center border border-cmm-green/30 font-mono text-xl text-cmm-green transition group-hover:border-cmm-green group-hover:bg-cmm-green group-hover:text-black">
+                      +
+                    </div>
+
+                    <div>
+
+                      <div class="flex flex-wrap items-center gap-2">
+
+                        <span class="text-sm font-bold">
+                          Upload a screenshot
+                        </span>
+
+                        <span class="font-mono text-[8px] uppercase tracking-[0.15em] text-cmm-green">
+                          STEP 02
+                        </span>
+
+                      </div>
+
+                      <span
+                        data-filename
+                        class="mt-1 block max-w-[260px] truncate font-mono text-[9px] uppercase tracking-wider text-cmm-green-dim"
+                      >
+                        PNG / JPG / WEBP — click to browse
+                      </span>
+
+                    </div>
+
+                  </div>
+
+                  <span class="w-fit border border-cmm-green/20 px-4 py-2 font-mono text-[9px] font-bold uppercase tracking-wider text-cmm-green transition group-hover:border-cmm-green group-hover:bg-cmm-green group-hover:text-black">
+                    Browse
+                  </span>
+
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    class="hidden"
+                  />
+
+                </label>
+
+
+                <button
+                  type="button"
+                  class="group mt-6 flex w-full items-center justify-between border border-cmm-green bg-cmm-green px-5 py-5 text-left text-black transition hover:bg-transparent hover:text-cmm-green active:scale-[0.995]"
+                >
+
+                  <span>
+
+                    <span class="block font-mono text-sm font-black uppercase tracking-wider">
+                      Check Mo Muna
+                    </span>
+
+                    <span class="mt-1 block font-mono text-[9px] uppercase tracking-wider opacity-60">
+                      Run security analysis
+                    </span>
+
+                  </span>
+
+                  <span class="font-mono text-xl transition group-hover:translate-x-1">
+                    →
+                  </span>
+
+                </button>
+
+
+                <div class="mt-5 flex items-start gap-3">
+
+                  <span class="font-mono text-[10px] text-cmm-green">
+                    [i]
+                  </span>
+
+                  <p class="font-mono text-[9px] leading-5 text-cmm-green-dim">
+                    Results are risk assessments, not definitive proof that a
+                    message or sender is fraudulent.
+                  </p>
+
+                </div>
+
+              </div>
+
+
+              <!-- Diagnostic sidebar -->
+
+              <div class="hidden p-5 lg:block">
+
+                <p class="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-cmm-green">
+                  ANALYSIS PIPELINE
+                </p>
+
+                <div class="mt-6 space-y-6">
+
+                  <div>
+
+                    <div class="flex justify-between font-mono text-[9px]">
+                      <span class="text-cmm-green-dim">01 / OCR</span>
+                      <span class="text-cmm-green">READY</span>
+                    </div>
+
+                    <div class="mt-2 h-1 bg-cmm-dark">
+                      <div class="h-full w-full bg-cmm-green/30"></div>
+                    </div>
+
+                  </div>
+
+
+                  <div>
+
+                    <div class="flex justify-between font-mono text-[9px]">
+                      <span class="text-cmm-green-dim">02 / RULES</span>
+                      <span class="text-cmm-green">READY</span>
+                    </div>
+
+                    <div class="mt-2 h-1 bg-cmm-dark">
+                      <div class="h-full w-full bg-cmm-green/30"></div>
+                    </div>
+
+                  </div>
+
+
+                  <div>
+
+                    <div class="flex justify-between font-mono text-[9px]">
+                      <span class="text-cmm-green-dim">03 / AI</span>
+                      <span class="text-cmm-green">READY</span>
+                    </div>
+
+                    <div class="mt-2 h-1 bg-cmm-dark">
+                      <div class="h-full w-full bg-cmm-green/30"></div>
+                    </div>
+
+                  </div>
+
+
+                  <div>
+
+                    <div class="flex justify-between font-mono text-[9px]">
+                      <span class="text-cmm-green-dim">04 / RISK</span>
+                      <span class="text-cmm-green">READY</span>
+                    </div>
+
+                    <div class="mt-2 h-1 bg-cmm-dark">
+                      <div class="h-full w-full bg-cmm-green/30"></div>
+                    </div>
+
+                  </div>
+
+                </div>
+
+
+                <div class="mt-12 border-t border-cmm-green/10 pt-5">
+
+                  <p class="font-mono text-[9px] uppercase tracking-[0.2em] text-cmm-green-dim">
+                    STATUS
+                  </p>
+
+                  <p class="mt-3 font-mono text-xs text-cmm-green">
+                    ● ALL SYSTEMS OPERATIONAL
+                  </p>
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+
+          <div class="mt-5 flex flex-wrap gap-x-6 gap-y-2 font-mono text-[9px] uppercase tracking-wider text-cmm-green-dim">
+
+            <span>✓ No passwords required</span>
+            <span>✓ No OTP required</span>
+            <span>✓ Everyday online safety</span>
+
+          </div>
+
+        </div>
+
+      </section>
+
+
+      <!-- HOW IT WORKS -->
+
+      <section id="how-it-works" class="border-b border-cmm-dark">
+
+        <div class="mx-auto max-w-7xl px-6 py-24 sm:py-32">
+
+          <div class="grid gap-10 lg:grid-cols-[0.7fr_1.3fr]">
+
+            <div>
+
+              <p class="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-cmm-green">
+                CMM / 003
+              </p>
+
+              <h2 class="mt-7 text-5xl font-black leading-[0.9] tracking-[-0.06em] sm:text-7xl">
+                DON'T
+                <br />
+                <span class="text-cmm-green">
+                  GUESS.
+                </span>
+                <br />
+                CHECK.
+              </h2>
+
+            </div>
+
+
+            <div class="lg:pt-12">
+
+              <p class="max-w-2xl text-lg leading-8 text-cmm-green-dim">
+                Suspicious messages are designed to make you react before
+                you think. We give you a moment to inspect what you're
+                actually looking at.
+              </p>
+
+
+              <div class="mt-16 border-t border-cmm-dark">
+
+                <div class="grid gap-8 border-b border-cmm-dark py-8 md:grid-cols-[80px_1fr_180px] md:items-center">
+
+                  <span class="font-mono text-sm font-bold text-cmm-green">
+                    01
+                  </span>
+
+                  <div>
+
+                    <h3 class="text-2xl font-black">
+                      Bring the message.
+                    </h3>
+
+                    <p class="mt-2 text-sm leading-6 text-cmm-green-dim">
+                      Paste suspicious text or upload a screenshot.
+                    </p>
+
+                  </div>
+
+                  <span class="font-mono text-[9px] uppercase tracking-[0.15em] text-cmm-green-dim md:text-right">
+                    MESSAGE → INPUT
+                  </span>
+
+                </div>
+
+
+                <div class="grid gap-8 border-b border-cmm-dark py-8 md:grid-cols-[80px_1fr_180px] md:items-center">
+
+                  <span class="font-mono text-sm font-bold text-cmm-green">
+                    02
+                  </span>
+
+                  <div>
+
+                    <h3 class="text-2xl font-black">
+                      Let it inspect.
+                    </h3>
+
+                    <p class="mt-2 text-sm leading-6 text-cmm-green-dim">
+                      Rules and AI examine patterns, context, and
+                      social-engineering signals.
+                    </p>
+
+                  </div>
+
+                  <span class="font-mono text-[9px] uppercase tracking-[0.15em] text-cmm-green-dim md:text-right">
+                    RULES + AI → SCAN
+                  </span>
+
+                </div>
+
+
+                <div class="grid gap-8 border-b border-cmm-dark py-8 md:grid-cols-[80px_1fr_180px] md:items-center">
+
+                  <span class="font-mono text-sm font-bold text-cmm-green">
+                    03
+                  </span>
+
+                  <div>
+
+                    <h3 class="text-2xl font-black">
+                      Make a better call.
+                    </h3>
+
+                    <p class="mt-2 text-sm leading-6 text-cmm-green-dim">
+                      Get a risk score, indicators, explanations, and
+                      practical next steps.
+                    </p>
+
+                  </div>
+
+                  <span class="font-mono text-[9px] uppercase tracking-[0.15em] text-cmm-green-dim md:text-right">
+                    SCAN → DECISION
+                  </span>
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </section>
+
+
+      <!-- ABOUT -->
+
+      <section id="about" class="relative overflow-hidden bg-cmm-dark">
+
+        <div class="absolute right-0 top-0 hidden h-full w-1/3 border-l border-cmm-green/5 lg:block"></div>
+
+        <div class="mx-auto max-w-7xl px-6 py-24 sm:py-32">
+
+          <div class="mb-12 flex items-center gap-4">
+
+            <span class="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-cmm-green">
+              CMM / 004
+            </span>
+
+            <span class="h-px w-10 bg-cmm-green/30"></span>
+
+            <span class="font-mono text-[10px] uppercase tracking-[0.2em] text-cmm-green-dim">
+              WHY THIS EXISTS
+            </span>
+
+          </div>
+
+
+          <div class="grid gap-14 lg:grid-cols-[1.2fr_0.8fr]">
+
+            <div>
+
+              <p class="font-mono text-xs uppercase tracking-[0.2em] text-cmm-green">
+                The safest click
+                <br />
+                is sometimes no click.
+              </p>
+
+              <h2 class="mt-7 max-w-4xl text-5xl font-black leading-[0.88] tracking-[-0.06em] sm:text-7xl">
+
+                Sometimes
+                <br />
+
+                <span class="text-cmm-green-dim">
+                  you just need
+                </span>
+
+                <br />
+
+                <span>
+                  a second opinion.
+                </span>
+
+              </h2>
+
+            </div>
+
+
+            <div class="lg:pt-16">
+
+              <p class="text-base leading-8 text-cmm-green-dim">
+                Scammers want you to react quickly. Click the link.
+                Send the money. Give the code.
+              </p>
+
+              <p class="mt-6 text-base leading-8 text-cmm-green-dim">
+                Check Mo Muna exists for the moment before that happens —
+                a place where you can stop, paste the message, and take
+                a closer look.
+              </p>
+
+            </div>
+
+          </div>
+
+
+          <div class="mt-20 grid border border-cmm-green/10 md:grid-cols-3">
+
+            <div class="border-b border-cmm-green/10 p-7 md:border-b-0 md:border-r">
+
+              <p class="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-cmm-green">
+                01 / PAUSE
+              </p>
+
+              <h3 class="mt-6 text-xl font-black">
+                Don't react yet.
+              </h3>
+
+              <p class="mt-3 text-sm leading-6 text-cmm-green-dim">
+                Urgency is one of the oldest tricks in the book.
+              </p>
+
+            </div>
+
+
+            <div class="border-b border-cmm-green/10 p-7 md:border-b-0 md:border-r">
+
+              <p class="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-cmm-green">
+                02 / CHECK
+              </p>
+
+              <h3 class="mt-6 text-xl font-black">
+                Look for the signals.
+              </h3>
+
+              <p class="mt-3 text-sm leading-6 text-cmm-green-dim">
+                Examine the message for phishing, fraud, and
+                social-engineering patterns.
+              </p>
+
+            </div>
+
+
+            <div class="p-7">
+
+              <p class="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-cmm-green">
+                03 / DECIDE
+              </p>
+
+              <h3 class="mt-6 text-xl font-black">
+                You make the call.
+              </h3>
+
+              <p class="mt-3 text-sm leading-6 text-cmm-green-dim">
+                The result is guidance, not a verdict.
+              </p>
+
+            </div>
+
+          </div>
+
+
+          <div class="mt-16 flex flex-col gap-4 border-t border-cmm-green/10 pt-8 sm:flex-row sm:items-center sm:justify-between">
+
+            <p class="font-mono text-[9px] uppercase tracking-[0.2em] text-cmm-green-dim">
+              When something feels wrong...
+            </p>
+
+            <p class="text-2xl font-black tracking-tight text-cmm-white sm:text-3xl">
+              “Scam ba 'to?”
+            </p>
+
+          </div>
+
+        </div>
+
+      </section>
+
+
+      <!-- FOOTER -->
+
+      <footer class="border-t border-cmm-green/10 bg-cmm-black">
+
+        <div class="mx-auto max-w-7xl px-6">
+
+          <div class="grid gap-12 py-20 md:grid-cols-[1fr_auto] md:items-end">
+
+            <div>
+
+              <div class="flex items-center gap-3">
+
+                <span class="h-2 w-2 rounded-full bg-cmm-green"></span>
+
+                <span class="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-cmm-green">
+                  SYSTEM ONLINE
+                </span>
+
+              </div>
+
+
+              <h2 class="mt-7 max-w-3xl text-5xl font-black leading-[0.9] tracking-[-0.06em] sm:text-6xl">
+
+                BAGO MAG-CLICK.
+                <br />
+
+                <span class="text-cmm-green">
+                  CHECK MO MUNA.
+                </span>
+
+              </h2>
+
+              <p class="mt-6 max-w-xl text-sm leading-7 text-cmm-green-dim">
+                A small tool for a simple habit:
+                pause, check, and think twice before acting.
+              </p>
+
+            </div>
+
+
+            <a
+              href="#analyzer"
+              class="group flex w-fit items-center gap-5 border border-cmm-green/30 px-5 py-4 font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-cmm-green transition hover:border-cmm-green hover:bg-cmm-green hover:text-black"
+            >
+              Analyze a message
+
+              <span class="text-lg transition group-hover:translate-y-1">
+                ↓
+              </span>
+
+            </a>
+
+          </div>
+
+
+          <div class="flex flex-col gap-4 border-t border-cmm-green/10 py-7 text-[9px] font-mono uppercase tracking-[0.15em] text-cmm-green-dim sm:flex-row sm:items-center sm:justify-between">
+
+            <span>
+              CHECK MO MUNA / SECURITY ANALYSIS
+            </span>
+
+            <span>
+              CMM / 2026
+            </span>
+
+          </div>
+
+        </div>
+
+      </footer>
+
+    </main>
+
+  </body>
+</html>

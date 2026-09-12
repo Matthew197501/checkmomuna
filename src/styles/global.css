@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+@theme {
+  --color-cmm-black: #070A08;
+  --color-cmm-dark: #0D120F;
+  --color-cmm-panel: #111813;
+
+  --color-cmm-green: #00FF88;
+  --color-cmm-green-dim: #7FAF91;
+
+  --color-cmm-red: #FF3B3B;
+  --color-cmm-red-dark: #7A1515;
+
+  --color-cmm-white: #F2F5F3;
+  --color-cmm-gray: #9AA69F;
+}
