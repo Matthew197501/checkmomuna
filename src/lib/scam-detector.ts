@@ -207,11 +207,36 @@ const patterns = [
  * "Do not provide your PIN."
  * "Our support team will never ask for your password."
  * "Never give anyone your verification code."
+ * "Our bank will never ask you to send your OTP."
  *
  * These should NOT be treated as credential requests.
+ *
+ * The pattern supports both:
+ *
+ * "never share your OTP"
+ *
+ * and:
+ *
+ * "will never ask you to send your OTP"
+ *
+ * so legitimate security-awareness messages do not
+ * accidentally receive scam points.
  */
 const credentialWarningPattern =
-  /\b(?:never|do not|don't|dont|should not|shouldn't)\s+(?:send|share|provide|give|submit|tell|confirm|ask for)\b.{0,60}\b(?:otp|one[- ]time password|verification code|security code|authentication code|password|passcode|pin)\b/i;
+  /\b(?:never|do not|don't|dont|should not|shouldn't)\b.{0,120}\b(?:ask(?:s)?\s+(?:you\s+)?(?:to\s+)?(?:send|share|provide|give|submit|tell|confirm)|ask\s+for|send|share|provide|give|submit|tell|confirm|request)\b.{0,120}\b(?:otp|one[- ]time password|verification code|security code|authentication code|password|passcode|pin)\b/i;
+
+
+/*
+ * Additional pattern for legitimate warnings where
+ * "will never ask" appears before the credential.
+ *
+ * Example:
+ *
+ * "Our bank will never ask for your OTP."
+ * "Support will never ask for your password."
+ */
+const credentialAskWarningPattern =
+  /\b(?:never|will never|would never|won't|wouldn't)\b.{0,100}\bask(?:s)?\b.{0,100}\b(?:otp|one[- ]time password|verification code|security code|authentication code|password|passcode|pin)\b/i;
 
 
 /*
@@ -297,8 +322,13 @@ export function analyzeMessage(
   let score = 0;
 
 
+  /*
+   * Legitimate security warnings should be detected before
+   * evaluating credential-request rules.
+   */
   const isCredentialWarning =
-    credentialWarningPattern.test(message);
+    credentialWarningPattern.test(message) ||
+    credentialAskWarningPattern.test(message);
 
 
   const isPaymentWarning =
