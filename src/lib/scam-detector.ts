@@ -172,6 +172,31 @@ const patterns = [
 
     points: 10,
   },
+
+
+  {
+    /*
+     * Gambling / casino promotional spam.
+     *
+     * This intentionally requires gambling-related language
+     * AND promotional / monetary language.
+     *
+     * This helps avoid flagging ordinary discussions such as:
+     *
+     * "This article explains how casino scams work."
+     */
+    regex:
+      /\b(?:casino|gambling|betting|slots|sportsbook)\b.{0,120}\b(?:bonus|sign\s*up|signup|welcome|play|playing|cash|reward|win|promotion)\b/i,
+
+    category: "Gambling promotion",
+
+    severity: "high" as const,
+
+    explanation:
+      "The message combines gambling or casino content with promotional or monetary incentives.",
+
+    points: 25,
+  },
 ];
 
 
