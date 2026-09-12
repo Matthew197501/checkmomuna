@@ -210,17 +210,6 @@ const patterns = [
  * "Our bank will never ask you to send your OTP."
  *
  * These should NOT be treated as credential requests.
- *
- * The pattern supports both:
- *
- * "never share your OTP"
- *
- * and:
- *
- * "will never ask you to send your OTP"
- *
- * so legitimate security-awareness messages do not
- * accidentally receive scam points.
  */
 const credentialWarningPattern =
   /\b(?:never|do not|don't|dont|should not|shouldn't)\b.{0,120}\b(?:ask(?:s)?\s+(?:you\s+)?(?:to\s+)?(?:send|share|provide|give|submit|tell|confirm)|ask\s+for|send|share|provide|give|submit|tell|confirm|request)\b.{0,120}\b(?:otp|one[- ]time password|verification code|security code|authentication code|password|passcode|pin)\b/i;
@@ -229,11 +218,6 @@ const credentialWarningPattern =
 /*
  * Additional pattern for legitimate warnings where
  * "will never ask" appears before the credential.
- *
- * Example:
- *
- * "Our bank will never ask for your OTP."
- * "Support will never ask for your password."
  */
 const credentialAskWarningPattern =
   /\b(?:never|will never|would never|won't|wouldn't)\b.{0,100}\bask(?:s)?\b.{0,100}\b(?:otp|one[- ]time password|verification code|security code|authentication code|password|passcode|pin)\b/i;
@@ -248,12 +232,6 @@ const paymentWarningPattern =
 
 /*
  * Explicit requests to disclose an authentication code.
- *
- * "Send your verification code"
- * "Provide the OTP"
- * "Share the security code"
- *
- * "Enter your verification code" is intentionally excluded.
  */
 const authenticationCodeRequestPattern =
   /\b(?:send|share|provide|give|submit|tell|confirm)\b.{0,40}\b(?:otp|one[- ]time password|verification code|security code|authentication code)\b/i;
@@ -274,11 +252,38 @@ const cryptoPattern =
 
 
 /*
- * Unexpected funds / balance claims.
+ * Unrealistic / promotional return claims.
  *
- * These are not inherently scams. They become much more
- * suspicious when combined with account credentials,
- * withdrawal instructions, or an external login link.
+ * Supports both:
+ *
+ * "earn ₱50,000 every week"
+ * "earn $10,000 monthly"
+ * "earn 50,000 PHP every week"
+ * "guaranteed 300% returns"
+ * "double your money"
+ */
+const unrealisticReturnPattern =
+  /(?:\bguaranteed\b|\bguarantee\b|\brisk[- ]free\b|\bno[- ]risk\b|\bdouble your money\b|\btriple your money\b|\b(?:earn|make|profit|return|returns|income)\b.{0,50}(?:(?:₱|\$)\s?\d+(?:[,.]\d+)*|\d+(?:[,.]\d+)*\s*(?:php|peso|pesos|usd|dollars?)|\d+(?:[,.]\d+)*\s*%|\bevery\s+(?:day|week|month|year)\b|\bper\s+(?:day|week|month|year)\b))/i;
+
+
+/*
+ * Investment entry / funding language.
+ *
+ * Supports:
+ *
+ * "invest ₱500"
+ * "invest ₱ 500"
+ * "start with only $100"
+ * "start with only $ 100"
+ * "invest 500 PHP"
+ * "minimum deposit 100 USD"
+ */
+const investmentEntryPattern =
+  /\b(?:invest|investment|investing|deposit|starting|start with|initial investment|minimum investment|minimum deposit|entry fee)\b.{0,60}(?:(?:only\s+)?(?:₱|\$)\s?\d+(?:[,.]\d+)*|(?:only\s+)?\d+(?:[,.]\d+)*\s*(?:php|peso|pesos|usd|dollars?)|small amount|minimum|low)\b/i;
+
+
+/*
+ * Unexpected funds / balance claims.
  */
 const unexpectedFundsPattern =
   /\b(?:balance|funds|money|assets|deposit|credited|transferred|received)\b/i;
@@ -293,14 +298,6 @@ const withdrawalPattern =
 
 /*
  * Login credentials appearing directly in a message.
- *
- * Example:
- *
- * "New Account: hhh699"
- * "New Password: aaa259"
- *
- * This is different from asking the recipient to provide
- * their own password.
  */
 const exposedCredentialPattern =
   /\b(?:new\s+)?(?:account|username|user(?:name)?|password|passcode|pin)\s*[:=]/i;
@@ -439,6 +436,47 @@ export function analyzeMessage(
     });
 
     score += 20;
+  }
+
+
+  /*
+   * INVESTMENT / UNREALISTIC RETURNS SIGNAL
+   *
+   * This is separate from the crypto/account-manipulation
+   * detector above.
+   *
+   * The signal requires:
+   *
+   * investment / crypto context
+   * +
+   * unrealistic return claims
+   * +
+   * investment entry/funding language
+   *
+   * This avoids treating ordinary discussion of crypto
+   * or investing as automatically suspicious.
+   */
+  const hasUnrealisticReturns =
+    unrealisticReturnPattern.test(message);
+
+  const hasInvestmentEntry =
+    investmentEntryPattern.test(message);
+
+
+  if (
+    hasCryptoContext &&
+    hasUnrealisticReturns &&
+    hasInvestmentEntry
+  ) {
+
+    flags.push({
+      category: "Investment / unrealistic returns",
+      severity: "high",
+      explanation:
+        "The message combines cryptocurrency or investment language with unusually high or guaranteed return claims and investment-related funding language.",
+    });
+
+    score += 25;
   }
 
 
