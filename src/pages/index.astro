@@ -6,11 +6,16 @@ import "../styles/global.css";
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
     <meta
       name="description"
-      content="Check Mo Muna — AI-powered scam-risk analysis for suspicious messages and screenshots."
+      content="Check Mo Muna — a free AI-powered scam-risk analyzer created by Samuel Mallo to help Filipinos check suspicious messages and screenshots before clicking or paying."
     />
-    <title>Check Mo Muna — Bago mag-click, check mo muna.</title>
+
+    <meta name="author" content="Samuel Mallo" />
+    <meta name="creator" content="Samuel Mallo" />
+
+    <title>Check Mo Muna — AI Scam-Risk Analyzer by Samuel Mallo</title>
   </head>
 
   <body class="min-h-screen bg-cmm-black text-cmm-white">
@@ -164,7 +169,9 @@ import "../styles/global.css";
           .join("");
 
         const recommendationList = aiAnalysis?.recommendations || [];
-        const primaryRecommendation = recommendationList[0] || "Review the message carefully and avoid taking any irreversible action until you verify the sender through an official channel.";
+        const primaryRecommendation =
+          recommendationList[0] ||
+          "Review the message carefully and avoid taking any irreversible action until you verify the sender through an official channel.";
 
         const recommendations = recommendationList
           .slice(1)
@@ -586,7 +593,9 @@ import "../styles/global.css";
 
         <div class="pointer-events-none absolute left-0 right-0 top-1/2 h-px bg-cmm-green/10"></div>
 
-      <div class="relative mx-auto max-w-7xl px-4 pb-8 pt-4 sm:pb-12 sm:pt-6 lg:py-10">          <div class="grid gap-14 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
+        <div class="relative mx-auto max-w-7xl px-4 pb-8 pt-4 sm:pb-12 sm:pt-6 lg:py-10">
+
+          <div class="grid gap-14 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
 
             <div>
 
@@ -1322,6 +1331,38 @@ import "../styles/global.css";
           </div>
 
 
+          <!-- CREATOR -->
+
+          <div class="mt-16 border border-cmm-green/10 bg-cmm-black p-6 sm:p-8">
+
+            <div class="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+
+              <div>
+
+                <p class="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-cmm-green">
+                  CREATED BY
+                </p>
+
+                <h3 class="mt-3 text-3xl font-black tracking-[-0.04em]">
+                  Samuel Mallo
+                </h3>
+
+                <p class="mt-2 max-w-2xl text-sm leading-7 text-cmm-green-dim">
+                  AI engineer and cybersecurity professional building
+                  practical technology for everyday online safety.
+                </p>
+
+              </div>
+
+              <div class="shrink-0 border border-cmm-green/20 px-4 py-3 font-mono text-[9px] uppercase tracking-[0.15em] text-cmm-green">
+                INDEPENDENT PROJECT
+              </div>
+
+            </div>
+
+          </div>
+
+
           <div class="mt-16 flex flex-col gap-4 border-t border-cmm-green/10 pt-8 sm:flex-row sm:items-center sm:justify-between">
 
             <p class="font-mono text-[9px] uppercase tracking-[0.2em] text-cmm-green-dim">
@@ -1394,15 +1435,23 @@ import "../styles/global.css";
           </div>
 
 
-          <div class="flex flex-col gap-4 border-t border-cmm-green/10 py-7 text-[9px] font-mono uppercase tracking-[0.15em] text-cmm-green-dim sm:flex-row sm:items-center sm:justify-between">
+          <div class="border-t border-cmm-green/10 py-7">
 
-            <span>
-              CHECK MO MUNA / SECURITY ANALYSIS
-            </span>
+            <div class="flex flex-col gap-4 text-[9px] font-mono uppercase tracking-[0.15em] text-cmm-green-dim sm:flex-row sm:items-center sm:justify-between">
 
-            <span>
-              CMM / 2026
-            </span>
+              <span>
+                CHECK MO MUNA / SECURITY ANALYSIS
+              </span>
+
+              <span>
+                CREATED BY <span class="text-cmm-green">SAMUEL MALLO</span>
+              </span>
+
+              <span>
+                CMM / 2026
+              </span>
+
+            </div>
 
           </div>
 
